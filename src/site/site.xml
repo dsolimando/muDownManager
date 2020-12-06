@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<project name="MudownManager">
+  <bannerLeft>
+    <name>MuDownManager</name>
+    <src>images/mu96.png</src>
+    <href>http://maven.apache.org/</href>
+  </bannerLeft>
+  <body>
+    <menu name="MuDownManager 1.0">
+      <item name="Introduction" href="index.html"/>
+      <item name="Screenshots" href="screenshots.html"/>
+      <item name="Sourceforge" href="http://sourceforge.net/projects/mudownmanager/"/>
+    </menu>
+    <menu ref="reports"/>
+  </body>
+</project>

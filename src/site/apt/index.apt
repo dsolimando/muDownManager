@@ -1,0 +1,40 @@
+Welcome to the MuDownManager home page!
+	
+	MuDownManager is a free and open source software that offers Megaupload download management for Megaupload premium members.
+	MudownManager has the following features:
+		
+		*	Lightweight and Cross-Platform (Windows XP/Vista/7, GNU/Linux, Mac OSX).
+		
+		*	Batching Downloads by specifying a list of URL's.
+		
+		*	Copy links directly from your preferred web browser and paste into MuDownManager.
+		
+		* 	Skip LinkBucks!
+		
+		* 	Very simple and intuitive GUI.
+		
+		*	Pluggable, other download sites will be added in the future.
+			
+Requirements
+		
+	* A Megaupload premium access.
+	
+	* MuDownManager requires a Java\u00a9 Runtime Environment ({{{http://java.sun.com/javase/downloads/index.jsp}download}}).  
+	
+	
+Download
+
+	You can <<download>> MuDownManager here:
+	
+		*	{{{http://sourceforge.net/projects/mudownmanager/files/1.0/setup.exe/download}<<Windows>> Installer}}
+		
+		*	{{{http://sourceforge.net/projects/mudownmanager/files/1.0/muDownManager-1.0.tar.gz/download} GNU tar.gz (for *NIX Operating Systems)}}
+	
+Screenshots
+
+[images/mu.jpeg] Main Interface
+
+	
+	
+	
+		

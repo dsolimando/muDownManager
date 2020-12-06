@@ -1,0 +1,8 @@
+
+jLabel6.text=31 minutes remaining - 10 of 500 Mo (450 Kb/s)
+jLabel6.icon=stock_smiley-1.png
+jLabel6.icon.failed=face-angry.png
+jLabel5.text=File.name
+jButton1.text=
+#NOI18N
+jButton1.icon=gtk-cancel.png

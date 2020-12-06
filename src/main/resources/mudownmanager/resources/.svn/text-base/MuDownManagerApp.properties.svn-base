@@ -1,0 +1,11 @@
+# Application global resources
+
+Application.name = muDownManager
+Application.title = muDownManager
+Application.version = 1.0
+Application.vendor = Community
+Application.homepage = http://mudownmanager.sourceforge.net
+Application.description = A simple Megaupload download manager.
+Application.vendorId = Sun
+Application.id = muDownManager
+Application.lookAndFeel = system

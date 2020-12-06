@@ -1,0 +1,27 @@
+<assembly>
+	<formats>
+		<format>tar.gz</format>
+	</formats>
+	<fileSets>
+		<fileSet>
+			<directory>target/classes</directory>
+			<outputDirectory>dist</outputDirectory>
+		</fileSet>
+	</fileSets>
+	<!--<files>
+		<file>
+			<source>src/main/bin/LoggingServer.sh</source>
+			<fileMode>493</fileMode>
+		</file>
+	</files>
+	--><dependencySets>
+		<dependencySet>
+			<unpack>false</unpack>
+			<scope>runtime</scope>
+			<outputDirectory>lib</outputDirectory>
+			<!--<excludes>
+				<exclude>be.rtbf.commons:logging-server</exclude>
+			</excludes>
+		--></dependencySet>
+	</dependencySets>
+</assembly>

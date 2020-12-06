@@ -1,0 +1,53 @@
+K 25
+svn:wc:ra_dav:version-url
+V 83
+/svnroot/mudownmanager/!svn/ver/2/muDownManager/src/main/java/mudownmanager/backend
+END
+DownloadThread.java
+K 25
+svn:wc:ra_dav:version-url
+V 103
+/svnroot/mudownmanager/!svn/ver/2/muDownManager/src/main/java/mudownmanager/backend/DownloadThread.java
+END
+PropertiesLoaderImpl.java
+K 25
+svn:wc:ra_dav:version-url
+V 109
+/svnroot/mudownmanager/!svn/ver/2/muDownManager/src/main/java/mudownmanager/backend/PropertiesLoaderImpl.java
+END
+LinkBuckReslutionException.java
+K 25
+svn:wc:ra_dav:version-url
+V 115
+/svnroot/mudownmanager/!svn/ver/2/muDownManager/src/main/java/mudownmanager/backend/LinkBuckReslutionException.java
+END
+LoginException.java
+K 25
+svn:wc:ra_dav:version-url
+V 103
+/svnroot/mudownmanager/!svn/ver/2/muDownManager/src/main/java/mudownmanager/backend/LoginException.java
+END
+InfoRetrievalException.java
+K 25
+svn:wc:ra_dav:version-url
+V 111
+/svnroot/mudownmanager/!svn/ver/2/muDownManager/src/main/java/mudownmanager/backend/InfoRetrievalException.java
+END
+FrenchLanguageUtils.java
+K 25
+svn:wc:ra_dav:version-url
+V 108
+/svnroot/mudownmanager/!svn/ver/2/muDownManager/src/main/java/mudownmanager/backend/FrenchLanguageUtils.java
+END
+PropertiesAccessExcpetion.java
+K 25
+svn:wc:ra_dav:version-url
+V 114
+/svnroot/mudownmanager/!svn/ver/2/muDownManager/src/main/java/mudownmanager/backend/PropertiesAccessExcpetion.java
+END
+Client.java
+K 25
+svn:wc:ra_dav:version-url
+V 95
+/svnroot/mudownmanager/!svn/ver/2/muDownManager/src/main/java/mudownmanager/backend/Client.java
+END

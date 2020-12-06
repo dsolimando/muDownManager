@@ -1,0 +1,26 @@
+<assembly>
+	<formats>
+		<format>tar.gz</format>
+	</formats>
+	<files>
+		<file>
+			<source>src/bin/muDownManager.sh</source>
+		</file>
+		<file>
+			<source>src/main/resources/mudownmanager/resources/mu256.ico</source>
+		</file>
+		<file>
+			<source>src/main/resources/mudownmanager/resources/trash.ico</source>
+		</file>
+		<file>
+			<source>src/main/resources/mudownmanager/resources/mu48.png</source>
+		</file>
+	</files>
+	<dependencySets>
+		<dependencySet>
+			<unpack>false</unpack>
+			<scope>runtime</scope>
+			<outputDirectory>lib</outputDirectory>
+		</dependencySet>
+	</dependencySets>
+</assembly>

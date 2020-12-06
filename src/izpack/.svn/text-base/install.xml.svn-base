@@ -1,0 +1,37 @@
+<installation version="1.0">
+	<info>
+		<appname>muDownManager</appname>
+		<appversion>1.0</appversion>
+		<authors>
+			<author name="Hari Seldon" email="hrsldn@gmail.com" />
+		</authors>
+		<javaversion>1.6</javaversion>
+		<run-privileged condition="izpack.windowsinstall.vista" />
+	</info>
+	<guiprefs width="600" height="480" resizable="no" />
+	<locale>
+		<langpack iso3="eng" />
+	</locale>
+	<resources>
+		<res id="LicencePanel.licence" src="${project.build.directory}/../src/license/GPLV3.txt" />
+		<res src="${project.build.directory}/../src/izpack/shortcuts.xml" id="shortcutSpec.xml" />
+	</resources>
+	<panels>
+		<panel classname="HelloPanel" />
+		<panel classname="LicencePanel" />
+		<panel classname="TargetPanel" />
+		<panel classname="InstallPanel" />
+		<panel classname="ShortcutPanel" />
+		<panel classname="FinishPanel" />
+	</panels> 
+	<packs>
+		<pack name="dist" required="yes">
+			<description>jar files</description>
+			<file src="../${project.artifactId}-${project.version}.exe" targetdir="$INSTALL_PATH" />
+			<file src="../${project.artifactId}-${project.version}-null.dir/${project.artifactId}-${project.version}/lib" targetdir="$INSTALL_PATH" />
+			<file src="../${project.artifactId}-${project.version}-null.dir/${project.artifactId}-${project.version}/mu256.ico" targetdir="$INSTALL_PATH/icons" />
+			<file src="../${project.artifactId}-${project.version}-null.dir/${project.artifactId}-${project.version}/trash.ico" targetdir="$INSTALL_PATH/icons" />
+		</pack>
+	</packs>
+	<native type="izpack" name="ShellLink.dll" />
+</installation>

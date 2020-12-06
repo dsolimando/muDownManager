@@ -1,0 +1,723 @@
+/* 
+ * Copyright (C) 2010 hrsldn@gmail.com.  All rights reserved.
+ * 
+ * This program is free software; you can redistribute it and/or modify 
+ * it under the terms of the GNU General Public License as published by 
+ * the Free Software Foundation; either version 3 of the License, or 
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful, but 
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY 
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License 
+ * for more details.
+ * 
+ * You should have received a copy of the GNU General Public License along 
+ * with this program; if not, write to the Free Software Foundation, Inc., 
+ * 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+ * 
+ */
+package mudownmanager;
+
+import java.awt.Dimension;
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import javax.swing.Icon;
+import javax.swing.JDialog;
+import javax.swing.JFrame;
+import javax.swing.Timer;
+
+import mudownmanager.DownloadContext.Status;
+import mudownmanager.backend.InfoRetrievalException;
+import mudownmanager.backend.LoginException;
+import mudownmanager.backend.MUClient;
+
+import org.jdesktop.application.Action;
+import org.jdesktop.application.FrameView;
+import org.jdesktop.application.ResourceMap;
+import org.jdesktop.application.SingleFrameApplication;
+import org.jdesktop.application.TaskMonitor;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.support.ClassPathXmlApplicationContext;
+
+/**
+ * The application's main frame.
+ */
+public class MuDownManagerView extends FrameView {
+	private MUClient<String,Object> mUClient;
+
+	private UrlListDialog urlListBox;
+
+	private List<DownloadContext> downloadContexts = new ArrayList<DownloadContext>();
+
+	private ConfiglDialog propertiesBox;
+
+	private ApplicationContext applicationContext;
+
+	private PropertiesLoader propertiesLoader;
+	
+	private AtomicInteger totalNumDownloads = new AtomicInteger();
+	
+	private AtomicInteger totalFinishedDownloads = new AtomicInteger();
+	
+	private AtomicInteger totalBandwidth = new AtomicInteger();
+	
+	private Map<DownloadContext, DownloadEntry> entryContext = new ConcurrentHashMap<DownloadContext, DownloadEntry> ();
+
+	public MuDownManagerView(SingleFrameApplication app) {
+		super(app);
+
+		applicationContext = new ClassPathXmlApplicationContext("classpath:spring/beans.xml");
+		propertiesLoader = (PropertiesLoader) applicationContext.getBean("PropertiesLoader");
+		mUClient = (MUClient<String,Object>) applicationContext.getBean("client");
+		
+		initComponents();
+		
+		getFrame().setIconImage(Toolkit.getDefaultToolkit().getImage(getClass().getClassLoader().getResource("mudownmanager/resources/mu24.png")));
+		
+		if (propertiesLoader.getProperties().getFirstLaunch()) {
+			showPropertiesBox();
+		} else {
+			mUClient.configure(propertiesLoader.getProperties());
+			if (propertiesLoader.getProperties().getUsername() != null && propertiesLoader.getProperties().getPassword() != null) {
+
+				new Thread(new Runnable() {
+					@Override
+					public void run() {
+						try {
+							statusMessageLabel.setText("Connecting...");
+							if (mUClient != null && mUClient.login(propertiesLoader.getProperties().getUsername(), propertiesLoader.getProperties().getPassword())) {
+								org.jdesktop.application.ResourceMap resourceMap = org.jdesktop.application.Application.getInstance(
+										mudownmanager.MuDownManagerApp.class).getContext().getResourceMap(MuDownManagerView.class);
+								jLabel2.setIcon(resourceMap.getIcon("jLabel2.iconGreen"));
+								jLabel2.setText("Connected");
+								jButton1.setEnabled(true);
+								jMenuItem2.setEnabled(true);
+								jButton4.setEnabled(false);
+								jMenuItem1.setEnabled(false);
+							}
+							statusMessageLabel.setText("");
+						} catch (LoginException e1) {
+						}
+					}
+				}).start();
+
+			}
+		}
+
+		// status bar initialization - message timeout, idle icon and busy
+		// animation, etc
+		ResourceMap resourceMap = getResourceMap();
+		int messageTimeout = resourceMap.getInteger("StatusBar.messageTimeout");
+		messageTimer = new Timer(messageTimeout, new ActionListener() {
+
+			public void actionPerformed(ActionEvent e) {
+				statusMessageLabel.setText(e.getActionCommand());
+			}
+		});
+		messageTimer.setRepeats(false);
+		int busyAnimationRate = resourceMap.getInteger("StatusBar.busyAnimationRate");
+		for (int i = 0; i < busyIcons.length; i++) {
+			busyIcons[i] = resourceMap.getIcon("StatusBar.busyIcons[" + i + "]");
+		}
+		busyIconTimer = new Timer(busyAnimationRate, new ActionListener() {
+
+			public void actionPerformed(ActionEvent e) {
+				busyIconIndex = (busyIconIndex + 1) % busyIcons.length;
+			}
+		});
+		idleIcon = resourceMap.getIcon("StatusBar.idleIcon");
+
+		// connecting action tasks to status bar via TaskMonitor
+		TaskMonitor taskMonitor = new TaskMonitor(getApplication().getContext());
+		taskMonitor.addPropertyChangeListener(new java.beans.PropertyChangeListener() {
+
+			public void propertyChange(java.beans.PropertyChangeEvent evt) {
+				String propertyName = evt.getPropertyName();
+				if ("started".equals(propertyName)) {
+					if (!busyIconTimer.isRunning()) {
+						busyIconIndex = 0;
+						busyIconTimer.start();
+					}
+
+				} else if ("done".equals(propertyName)) {
+					busyIconTimer.stop();
+				} else if ("message".equals(propertyName)) {
+					String text = (String) (evt.getNewValue());
+					statusMessageLabel.setText((text == null) ? "" : text);
+					messageTimer.restart();
+				} else if ("progress".equals(propertyName)) {
+					int value = (Integer) (evt.getNewValue());
+				}
+			}
+		});
+	}
+
+	@Action
+	public void showPropertiesBox() {
+		if (propertiesBox == null) {
+			JFrame mainFrame = MuDownManagerApp.getApplication().getMainFrame();
+			propertiesBox = new ConfiglDialog(mainFrame, true, propertiesLoader);
+			propertiesBox.setLocationRelativeTo(mainFrame);
+		}
+		MuDownManagerApp.getApplication().show(propertiesBox);
+	}
+
+	@Action
+	public void showAboutBox() {
+		if (aboutBox == null) {
+			JFrame mainFrame = MuDownManagerApp.getApplication().getMainFrame();
+			aboutBox = new MuDownManagerAboutBox(mainFrame);
+			aboutBox.setLocationRelativeTo(mainFrame);
+		}
+		MuDownManagerApp.getApplication().show(aboutBox);
+	}
+
+	@Action
+	public void showLoginBox() {
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					statusMessageLabel.setText("Connecting...");
+					if (mUClient != null && mUClient.login(propertiesLoader.getProperties().getUsername(), propertiesLoader.getProperties().getPassword())) {
+						org.jdesktop.application.ResourceMap resourceMap = org.jdesktop.application.Application.getInstance(
+								mudownmanager.MuDownManagerApp.class).getContext().getResourceMap(MuDownManagerView.class);
+						jLabel2.setIcon(resourceMap.getIcon("jLabel2.iconGreen"));
+						jLabel2.setText("Connected");
+						jButton1.setEnabled(true);
+						jMenuItem2.setEnabled(true);
+						jButton4.setEnabled(false);
+						jMenuItem1.setEnabled(false);
+					}
+					statusMessageLabel.setText("");
+				} catch (LoginException e1) {
+				}
+			}
+		}).start();
+	}
+
+	private String formatTimeRemaining(int timeRemaining) {
+		String bottomText = "";
+		if (timeRemaining != -1) {
+			if (timeRemaining >= 60) {
+				bottomText += String.format("%s minutes remaining - ", (int) (timeRemaining / 60));
+			} else {
+				bottomText += String.format("%s seconds remaining - ", timeRemaining);
+			}
+		}
+
+		return bottomText;
+	}
+
+	private String formatFileSize(long total, long current) {
+		String s = "";
+		if (total < 1024) {
+			s += String.format("%s of %s Ko ", current, total);
+		}
+
+		if (total >= 1024 && total < 1048576) {
+			s += String.format("%1$.1f of %2$.1f Mo ", current / 1024., total / 1024.);
+		}
+
+		if (total >= 1048576) {
+			s += String.format("%1$.1f of %2$.1f Go ", current / 1048576., total / 1048576.);
+		}
+		return s;
+	}
+
+	private String formatBandwidth(double bandwidth) {
+		String s = "";
+		if (bandwidth > -1) {
+			if (bandwidth <= 1024) {
+				s += String.format("(%1$.1f Kb/s)", bandwidth);
+			} else {
+				s += String.format("(%1$.1f Mb/s)", bandwidth / 1024.);
+			}
+		}
+		return s;
+	}
+
+	@Action
+	public void showURLListBox() {
+		JFrame mainFrame = MuDownManagerApp.getApplication().getMainFrame();
+		if (urlListBox == null) {
+			urlListBox = new UrlListDialog(mainFrame, true, new Callback<String, Object>() {
+
+				public void call(final Map<String, Object> parameters) {
+					new Thread (new Runnable() {
+						
+						@Override
+						public void run() {
+
+							if (Integer.parseInt((String) parameters.get("returnStatus")) == UrlListDialog.RET_OK) {
+								if (parameters.get("lines") != null) {
+
+									statusMessageLabel.setText("Loading URLs...");
+									List<String> lines = (List<String>) parameters.get("lines");
+									int i = downloadContexts.size();
+
+									for (String url : lines) {
+										try {
+											DownloadContext downloadContext = mUClient.getDownloadInfos(url);
+											downloadContexts.add(downloadContext);
+											String bottomText = formatTimeRemaining(downloadContext.getTimeRemaining());
+											bottomText += formatFileSize(downloadContext.getTotalFileSize(), downloadContext.getCurrentFileSize());
+											bottomText += formatBandwidth(downloadContext.getBandwidth());
+
+											DownloadEntry downloadEntry = new DownloadEntry();
+											entryContext.put(downloadContext, downloadEntry);
+											
+											if ((i + 1) % 2 == 0)
+												downloadEntry.setRgbBckColor(new int[] { 254, 220, 130 });
+											else
+												downloadEntry.setDefaultRgbBckColor();
+
+											downloadEntry.setBottomText(bottomText);
+
+											if (downloadContext.getFilename() != null) {
+												downloadEntry.setTopText(downloadContext.getFilename());
+											}
+
+											downloadEntry.setProgress((int) (downloadContext.getCurrentFileSize() / downloadContext.getTotalFileSize()));
+											jPanel1.add(downloadEntry);
+											jPanel1.setPreferredSize(new Dimension(downloadEntry.getPreferredSize().width, (i + 1)
+													* (downloadEntry.getPreferredSize().height)));
+											jPanel1.revalidate();
+											i++;
+										} catch (InfoRetrievalException e) {
+											// TODO Auto-generated catch block
+											e.printStackTrace();
+										}
+									}
+									totalNumDownloads.set(i);
+									statusMessageLabel.setText("");
+									jButton3.setEnabled(true);
+									jMenuItem3.setEnabled(true);
+									// statusMessageLabel.setText(String.format("Total Bandwidth: %s Mb/s",
+									// totalBw));
+								}
+							}
+													
+						}
+					}).start();
+				}
+			});
+			urlListBox.setClient(mUClient);
+		}
+		urlListBox.emptyTextArera();
+		urlListBox.setLocationRelativeTo(mainFrame);
+		MuDownManagerApp.getApplication().show(urlListBox);
+	}
+
+	@Action
+	public void startCopy() {
+		
+		jLabel1.setText("Downloads finished: 0/"+totalNumDownloads);
+		for (final DownloadContext downloadContext : downloadContexts) {
+
+			if (downloadContext.getStatus() != Status.IDLE) continue;
+			
+//			final DownloadEntry downloadEntryJ = (DownloadEntry) jPanel1.getComponent(j);
+
+			statusMessageLabel.setText("Starting Download...");
+			mUClient.startCopy(downloadContext, new Callback() {
+
+				private final DownloadEntry downloadEntry = entryContext.get(downloadContext);
+
+				private final DownloadContext downloadContext1 = downloadContext;
+				
+				private double previousBandwidth = 0;
+				
+				public void call(Map parameters) {
+					DownloadContext downloadContext = (DownloadContext) parameters.get("downloadContext");
+					downloadContext1.setStatus(downloadContext.getStatus());
+
+					if (downloadContext.getStatus() == DownloadContext.Status.IDLE) {
+						//totalNumDownloads.incrementAndGet();
+						//jLabel1.setText("Downloads finished: 0/"+totalNumDownloads);
+					} else if (downloadContext.getStatus() == DownloadContext.Status.FINISHED) {
+						downloadEntry.setProgress(100);
+						downloadEntry.setFinished(0);
+						totalFinishedDownloads.incrementAndGet();
+						statusMessageLabel.setText("");
+						jLabel1.setText("Downloads finished: "+totalFinishedDownloads.get()+ "/"+totalNumDownloads);
+						totalBandwidth.addAndGet((int) -previousBandwidth);
+					} else if (downloadContext.getStatus() == DownloadContext.Status.FAILED) {
+						downloadEntry.setFailed(0);
+						totalFinishedDownloads.incrementAndGet();
+						jLabel1.setText("Downloads finished: "+totalFinishedDownloads.get()+ "/"+totalNumDownloads);
+						statusMessageLabel.setText("");
+						totalBandwidth.addAndGet((int) -previousBandwidth);
+					} else if ( downloadContext.getStatus() == Status.STOPPED) {
+						downloadEntry.setStopped();
+						totalFinishedDownloads.incrementAndGet();
+						jLabel1.setText("Downloads finished: "+totalFinishedDownloads.get()+ "/"+totalNumDownloads);
+						statusMessageLabel.setText("");
+						totalBandwidth.addAndGet((int) -previousBandwidth);
+					} else {
+						if (downloadEntry.isStop()) {
+							mUClient.stop(downloadContext);
+						}
+						totalBandwidth.addAndGet((int) -previousBandwidth);
+						totalBandwidth.addAndGet((int)(downloadContext.getBandwidth()));
+						previousBandwidth = downloadContext.getBandwidth();
+						statusMessageLabel.setText(String.format("Total Bandwidth: %s", formatBandwidth(totalBandwidth.get())));
+						downloadEntry.setBottomText(formatTimeRemaining(downloadContext.getTimeRemaining())
+								+ formatFileSize(downloadContext.getTotalFileSize(), downloadContext.getCurrentFileSize())
+								+ formatBandwidth(downloadContext.getBandwidth()));
+						downloadEntry.setProgress((int) (downloadContext.getCurrentFileSize() * 100 / downloadContext.getTotalFileSize()));
+					}
+				}
+			});
+		}
+		jButton3.setEnabled(false);
+		jMenuItem3.setEnabled(false);
+		jButton2.setEnabled(true);
+		jMenuItem4.setEnabled(true);
+	}
+
+	@Action
+	public void clean() {
+		int i = 0;
+		List<DownloadContext> toRemove = new ArrayList<DownloadContext>();
+		List<DownloadEntry> entriesToRemove = new ArrayList<DownloadEntry>();
+
+		for (DownloadContext downloadContext : downloadContexts) {
+			System.out.println(i + " " + downloadContext.getStatus());
+			if (downloadContext.getStatus() == DownloadContext.Status.FINISHED 
+					|| downloadContext.getStatus() == DownloadContext.Status.FAILED
+					|| downloadContext.getStatus() == Status.STOPPED) {
+				toRemove.add(downloadContext);
+				entriesToRemove.add((DownloadEntry) jPanel1.getComponent(i));
+			}
+			i++;
+		}
+
+		for (DownloadContext downloadContext : toRemove) {
+			downloadContexts.remove(downloadContext);
+			DownloadEntry entry = entryContext.get(downloadContext);
+			entry.removeAll();
+			jPanel1.remove(entry);
+			jPanel1.setPreferredSize(
+					new Dimension(entryContext.get(downloadContext).getPreferredSize().width, 
+							(downloadContexts.size() +1) * (entryContext.get(downloadContext).getPreferredSize().height)));
+			entry = null;
+			entryContext.remove(downloadContext);
+			totalNumDownloads.decrementAndGet();
+		}
+		
+		totalFinishedDownloads.set(0);
+		jLabel1.setText("Downloads finished: "+totalFinishedDownloads.get()+ "/"+totalNumDownloads);
+
+		for (int j = 0; j < jPanel1.getComponentCount(); j++) {
+			if ((j + 1) % 2 == 0)
+				((DownloadEntry) jPanel1.getComponent(j)).setRgbBckColor(new int[] { 254, 220, 130 });
+			else
+				((DownloadEntry) jPanel1.getComponent(j)).setDefaultRgbBckColor();
+		}
+		jPanel1.repaint();
+		jPanel1.revalidate();
+	}
+	
+	@Action
+	public void stopAll () {
+		for (DownloadContext downloadContext : downloadContexts) {
+			mUClient.stop(downloadContext);
+		}
+	}
+
+	public void setmUClient(MUClient mUClient) {
+		this.mUClient = mUClient;
+	}
+
+	public void setApplicationContext(ApplicationContext applicationContext) {
+		this.applicationContext = applicationContext;
+	}
+
+	/**
+	 * This method is called from within the constructor to initialize the form.
+	 * WARNING: Do NOT modify this code. The content of this method is always
+	 * regenerated by the Form Editor.
+	 */
+	@SuppressWarnings("unchecked")
+	// <editor-fold defaultstate="collapsed"
+    // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
+    private void initComponents() {
+
+        mainPanel = new javax.swing.JPanel();
+        jScrollPane1 = new javax.swing.JScrollPane();
+        jPanel1 = new javax.swing.JPanel();
+        jToolBar1 = new javax.swing.JToolBar();
+        jButton4 = new javax.swing.JButton();
+        jButton1 = new javax.swing.JButton();
+        jButton3 = new javax.swing.JButton();
+        jButton2 = new javax.swing.JButton();
+        jButton7 = new javax.swing.JButton();
+        jSeparator1 = new javax.swing.JToolBar.Separator();
+        jButton6 = new javax.swing.JButton();
+        jSeparator2 = new javax.swing.JToolBar.Separator();
+        jButton5 = new javax.swing.JButton();
+        menuBar = new javax.swing.JMenuBar();
+        javax.swing.JMenu fileMenu = new javax.swing.JMenu();
+        jMenuItem1 = new javax.swing.JMenuItem();
+        jMenuItem2 = new javax.swing.JMenuItem();
+        jMenuItem3 = new javax.swing.JMenuItem();
+        jMenuItem4 = new javax.swing.JMenuItem();
+        jMenuItem5 = new javax.swing.JMenuItem();
+        javax.swing.JMenuItem exitMenuItem = new javax.swing.JMenuItem();
+        javax.swing.JMenu helpMenu = new javax.swing.JMenu();
+        javax.swing.JMenuItem aboutMenuItem = new javax.swing.JMenuItem();
+        statusPanel = new javax.swing.JPanel();
+        statusMessageLabel = new javax.swing.JLabel();
+        jLabel1 = new javax.swing.JLabel();
+        jLabel2 = new javax.swing.JLabel();
+
+        mainPanel.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        mainPanel.setMaximumSize(new java.awt.Dimension(32767, 260));
+        mainPanel.setName("mainPanel"); // NOI18N
+        mainPanel.setPreferredSize(new java.awt.Dimension(525, 260));
+
+        jScrollPane1.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        jScrollPane1.setName("jScrollPane1"); // NOI18N
+        jScrollPane1.setPreferredSize(new java.awt.Dimension(528, 0));
+
+        jPanel1.setBorder(javax.swing.BorderFactory.createEmptyBorder(0, 0, 0, 0));
+        jPanel1.setMaximumSize(new java.awt.Dimension(0, 32000));
+        jPanel1.setName("jPanel1"); // NOI18N
+        jPanel1.setPreferredSize(new java.awt.Dimension(545, 0));
+        jPanel1.setLayout(new javax.swing.BoxLayout(jPanel1, javax.swing.BoxLayout.Y_AXIS));
+        jScrollPane1.setViewportView(jPanel1);
+
+        jToolBar1.setRollover(true);
+        jToolBar1.setName("jToolBar1"); // NOI18N
+
+        javax.swing.ActionMap actionMap = org.jdesktop.application.Application.getInstance().getContext().getActionMap(MuDownManagerView.class, this);
+        jButton4.setAction(actionMap.get("showLoginBox")); // NOI18N
+        org.jdesktop.application.ResourceMap resourceMap = org.jdesktop.application.Application.getInstance().getContext().getResourceMap(MuDownManagerView.class);
+        jButton4.setIcon(resourceMap.getIcon("jButton4.icon")); // NOI18N
+        jButton4.setText(resourceMap.getString("jButton4.text")); // NOI18N
+        jButton4.setFocusable(false);
+        jButton4.setHorizontalTextPosition(javax.swing.SwingConstants.CENTER);
+        jButton4.setName("jButton4"); // NOI18N
+        jButton4.setVerticalTextPosition(javax.swing.SwingConstants.BOTTOM);
+        jToolBar1.add(jButton4);
+
+        jButton1.setAction(actionMap.get("showURLListBox")); // NOI18N
+        jButton1.setIcon(resourceMap.getIcon("loadButton.icon")); // NOI18N
+        jButton1.setText(resourceMap.getString("loadButton.text")); // NOI18N
+        jButton1.setEnabled(false);
+        jButton1.setFocusable(false);
+        jButton1.setHorizontalTextPosition(javax.swing.SwingConstants.CENTER);
+        jButton1.setName("loadButton"); // NOI18N
+        jButton1.setVerticalTextPosition(javax.swing.SwingConstants.BOTTOM);
+        jToolBar1.add(jButton1);
+
+        jButton3.setAction(actionMap.get("startCopy")); // NOI18N
+        jButton3.setIcon(resourceMap.getIcon("jButton3.icon")); // NOI18N
+        jButton3.setText(resourceMap.getString("jButton3.text")); // NOI18N
+        jButton3.setEnabled(false);
+        jButton3.setFocusable(false);
+        jButton3.setHorizontalTextPosition(javax.swing.SwingConstants.CENTER);
+        jButton3.setName("jButton3"); // NOI18N
+        jButton3.setVerticalTextPosition(javax.swing.SwingConstants.BOTTOM);
+        jToolBar1.add(jButton3);
+
+        jButton2.setAction(actionMap.get("stopAll")); // NOI18N
+        jButton2.setIcon(resourceMap.getIcon("jButton2.icon")); // NOI18N
+        jButton2.setText(resourceMap.getString("jButton2.text")); // NOI18N
+        jButton2.setEnabled(false);
+        jButton2.setFocusable(false);
+        jButton2.setHorizontalTextPosition(javax.swing.SwingConstants.CENTER);
+        jButton2.setName("jButton2"); // NOI18N
+        jButton2.setVerticalTextPosition(javax.swing.SwingConstants.BOTTOM);
+        jToolBar1.add(jButton2);
+
+        jButton7.setAction(actionMap.get("clean")); // NOI18N
+        jButton7.setIcon(resourceMap.getIcon("jButton7.icon")); // NOI18N
+        jButton7.setText(resourceMap.getString("jButton7.text")); // NOI18N
+        jButton7.setFocusable(false);
+        jButton7.setHorizontalTextPosition(javax.swing.SwingConstants.CENTER);
+        jButton7.setName("jButton7"); // NOI18N
+        jButton7.setVerticalTextPosition(javax.swing.SwingConstants.BOTTOM);
+        jToolBar1.add(jButton7);
+
+        jSeparator1.setName("jSeparator1"); // NOI18N
+        jToolBar1.add(jSeparator1);
+
+        jButton6.setAction(actionMap.get("showPropertiesBox")); // NOI18N
+        jButton6.setIcon(resourceMap.getIcon("jButton6.icon")); // NOI18N
+        jButton6.setText(resourceMap.getString("jButton6.text")); // NOI18N
+        jButton6.setFocusable(false);
+        jButton6.setHorizontalTextPosition(javax.swing.SwingConstants.CENTER);
+        jButton6.setName("jButton6"); // NOI18N
+        jButton6.setVerticalTextPosition(javax.swing.SwingConstants.BOTTOM);
+        jToolBar1.add(jButton6);
+
+        jSeparator2.setName("jSeparator2"); // NOI18N
+        jToolBar1.add(jSeparator2);
+
+        jButton5.setAction(actionMap.get("quit")); // NOI18N
+        jButton5.setIcon(resourceMap.getIcon("jButton5.icon")); // NOI18N
+        jButton5.setText(resourceMap.getString("jButton5.text")); // NOI18N
+        jButton5.setFocusable(false);
+        jButton5.setHorizontalTextPosition(javax.swing.SwingConstants.CENTER);
+        jButton5.setName("jButton5"); // NOI18N
+        jButton5.setVerticalTextPosition(javax.swing.SwingConstants.BOTTOM);
+        jToolBar1.add(jButton5);
+
+        javax.swing.GroupLayout mainPanelLayout = new javax.swing.GroupLayout(mainPanel);
+        mainPanel.setLayout(mainPanelLayout);
+        mainPanelLayout.setHorizontalGroup(
+            mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jToolBar1, javax.swing.GroupLayout.DEFAULT_SIZE, 542, Short.MAX_VALUE)
+            .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 542, Short.MAX_VALUE)
+        );
+        mainPanelLayout.setVerticalGroup(
+            mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(mainPanelLayout.createSequentialGroup()
+                .addComponent(jToolBar1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 228, Short.MAX_VALUE)
+                .addContainerGap())
+        );
+
+        menuBar.setName("menuBar"); // NOI18N
+
+        fileMenu.setText(resourceMap.getString("fileMenu.text")); // NOI18N
+        fileMenu.setName("fileMenu"); // NOI18N
+
+        jMenuItem1.setAction(actionMap.get("showLoginBox")); // NOI18N
+        jMenuItem1.setIcon(resourceMap.getIcon("jMenuItem1.icon")); // NOI18N
+        jMenuItem1.setText(resourceMap.getString("jMenuItem1.text")); // NOI18N
+        jMenuItem1.setName("jMenuItem1"); // NOI18N
+        fileMenu.add(jMenuItem1);
+
+        jMenuItem2.setAction(actionMap.get("showURLListBox")); // NOI18N
+        jMenuItem2.setIcon(resourceMap.getIcon("jMenuItem2.icon")); // NOI18N
+        jMenuItem2.setText(resourceMap.getString("jMenuItem2.text")); // NOI18N
+        jMenuItem2.setEnabled(false);
+        jMenuItem2.setName("jMenuItem2"); // NOI18N
+        fileMenu.add(jMenuItem2);
+
+        jMenuItem3.setAction(actionMap.get("startCopy")); // NOI18N
+        jMenuItem3.setIcon(resourceMap.getIcon("jMenuItem3.icon")); // NOI18N
+        jMenuItem3.setText(resourceMap.getString("jMenuItem3.text")); // NOI18N
+        jMenuItem3.setEnabled(false);
+        jMenuItem3.setName("jMenuItem3"); // NOI18N
+        fileMenu.add(jMenuItem3);
+
+        jMenuItem4.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_S, java.awt.event.InputEvent.CTRL_MASK));
+        jMenuItem4.setIcon(resourceMap.getIcon("jMenuItem4.icon")); // NOI18N
+        jMenuItem4.setText(resourceMap.getString("jMenuItem4.text")); // NOI18N
+        jMenuItem4.setEnabled(false);
+        jMenuItem4.setName("jMenuItem4"); // NOI18N
+        fileMenu.add(jMenuItem4);
+
+        jMenuItem5.setAction(actionMap.get("showPropertiesBox")); // NOI18N
+        jMenuItem5.setIcon(resourceMap.getIcon("jMenuItem5.icon")); // NOI18N
+        jMenuItem5.setText(resourceMap.getString("jMenuItem5.text")); // NOI18N
+        jMenuItem5.setName("jMenuItem5"); // NOI18N
+        fileMenu.add(jMenuItem5);
+
+        exitMenuItem.setAction(actionMap.get("quit")); // NOI18N
+        exitMenuItem.setIcon(resourceMap.getIcon("exitMenuItem.icon")); // NOI18N
+        exitMenuItem.setText(resourceMap.getString("exitMenuItem.text")); // NOI18N
+        exitMenuItem.setName("exitMenuItem"); // NOI18N
+        fileMenu.add(exitMenuItem);
+
+        menuBar.add(fileMenu);
+
+        helpMenu.setText(resourceMap.getString("helpMenu.text")); // NOI18N
+        helpMenu.setName("helpMenu"); // NOI18N
+
+        aboutMenuItem.setAction(actionMap.get("showAboutBox")); // NOI18N
+        aboutMenuItem.setIcon(resourceMap.getIcon("aboutMenuItem.icon")); // NOI18N
+        aboutMenuItem.setName("aboutMenuItem"); // NOI18N
+        helpMenu.add(aboutMenuItem);
+
+        menuBar.add(helpMenu);
+
+        statusPanel.setName("statusPanel"); // NOI18N
+        statusPanel.setPreferredSize(new java.awt.Dimension(574, 20));
+
+        statusMessageLabel.setText(resourceMap.getString("statusMessageLabel.text")); // NOI18N
+        statusMessageLabel.setName("statusMessageLabel"); // NOI18N
+
+        jLabel1.setText(resourceMap.getString("jLabel1.text")); // NOI18N
+        jLabel1.setName("jLabel1"); // NOI18N
+
+        jLabel2.setIcon(resourceMap.getIcon("jLabel2.icon")); // NOI18N
+        jLabel2.setText(resourceMap.getString("jLabel2.text")); // NOI18N
+        jLabel2.setAlignmentY(0.0F);
+        jLabel2.setInheritsPopupMenu(false);
+        jLabel2.setName("jLabel2"); // NOI18N
+        jLabel2.setVerticalTextPosition(javax.swing.SwingConstants.TOP);
+
+        javax.swing.GroupLayout statusPanelLayout = new javax.swing.GroupLayout(statusPanel);
+        statusPanel.setLayout(statusPanelLayout);
+        statusPanelLayout.setHorizontalGroup(
+            statusPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(statusPanelLayout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(statusMessageLabel)
+                .addGap(15, 15, 15)
+                .addComponent(jLabel1)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 267, Short.MAX_VALUE)
+                .addComponent(jLabel2)
+                .addGap(18, 18, 18))
+        );
+        statusPanelLayout.setVerticalGroup(
+            statusPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(statusPanelLayout.createSequentialGroup()
+                .addGroup(statusPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(statusPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                        .addComponent(statusMessageLabel)
+                        .addComponent(jLabel1))
+                    .addComponent(jLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 22, javax.swing.GroupLayout.PREFERRED_SIZE))
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+        );
+
+        setComponent(mainPanel);
+        setMenuBar(menuBar);
+        setStatusBar(statusPanel);
+    }// </editor-fold>//GEN-END:initComponents
+
+    // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JButton jButton1;
+    private javax.swing.JButton jButton2;
+    private javax.swing.JButton jButton3;
+    private javax.swing.JButton jButton4;
+    private javax.swing.JButton jButton5;
+    private javax.swing.JButton jButton6;
+    private javax.swing.JButton jButton7;
+    private javax.swing.JLabel jLabel1;
+    private javax.swing.JLabel jLabel2;
+    private javax.swing.JMenuItem jMenuItem1;
+    private javax.swing.JMenuItem jMenuItem2;
+    private javax.swing.JMenuItem jMenuItem3;
+    private javax.swing.JMenuItem jMenuItem4;
+    private javax.swing.JMenuItem jMenuItem5;
+    private javax.swing.JPanel jPanel1;
+    private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JToolBar.Separator jSeparator1;
+    private javax.swing.JToolBar.Separator jSeparator2;
+    private javax.swing.JToolBar jToolBar1;
+    private javax.swing.JPanel mainPanel;
+    private javax.swing.JMenuBar menuBar;
+    private javax.swing.JLabel statusMessageLabel;
+    private javax.swing.JPanel statusPanel;
+    // End of variables declaration//GEN-END:variables
+	private final Timer messageTimer;
+	private final Timer busyIconTimer;
+	private final Icon idleIcon;
+	private final Icon[] busyIcons = new Icon[15];
+	private int busyIconIndex = 0;
+	private JDialog aboutBox;
+}

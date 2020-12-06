@@ -1,0 +1,24 @@
+<shortcuts>
+  <skipIfNotSupported/>
+  <programGroup defaultName="MuDownManager"
+                location="startMenu"/>
+  <shortcut
+    name="MuDownManager"
+    target="$INSTALL_PATH\muDownManager-1.0.exe"
+    iconFile="$INSTALL_PATH\icons\mu256.ico"
+    workingDirectory="$INSTALL_PATH"
+    programGroup="yes"
+    desktop="yes"
+    applications="yes"
+    startMenu="yes">
+  </shortcut>
+  <shortcut
+    name="Uninstall"
+    target="$INSTALL_PATH\Uninstaller\uninstaller.jar"
+    iconFile="$INSTALL_PATH\icons\trash.ico"
+    workingDirectory="$INSTALL_PATH"
+    programGroup="yes"
+    desktop="no"
+    startMenu="no">
+  </shortcut>
+</shortcuts>
